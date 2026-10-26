@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Bogestv0 Unblock</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{color-scheme:dark;--bg:#0f1214;--panel:#171b1f;--panel2:#1f2429;--line:#2a3138;--text:#eef1f3;--muted:#8d99a3;--green:#34a853;--green2:#4cc46a;--red:#e0584b;--amber:#e0a93f;--tg:#2aabee}
+*{box-sizing:border-box;margin:0}
+body{background:radial-gradient(800px 420px at 50% -8%,#1b2d27 0,#0f1214 62%) fixed,#0f1214;color:var(--text);font:14px/1.45 Inter,"Segoe UI",system-ui,sans-serif;min-height:100vh;padding:16px 16px 30px}
+.wrap{max-width:480px;margin:0 auto}
+a{color:inherit}
+*{scrollbar-width:thin;scrollbar-color:#3a4249 transparent}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#38414a;border-radius:99px;border:2px solid #161a1e}
+::-webkit-scrollbar-thumb:hover{background:#4a5560}::-webkit-scrollbar-corner{background:transparent}
+select option{background:#1f2429;color:#eef1f3}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#4cc46a,#1f7a3a);display:grid;place-items:center;box-shadow:0 4px 14px #34a85344}
+.logo svg{width:17px;height:17px;stroke:#fff;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.brand b{color:var(--green2)}.ver{font:500 11.5px Inter,sans-serif;color:#5f6b74;margin-left:2px}
+.tg{display:inline-flex;align-items:center;gap:7px;padding:6px 12px 6px 9px;border-radius:99px;background:#2aabee1c;border:1px solid #2aabee55;color:#8fd3f7;font:600 12.5px Inter,sans-serif;text-decoration:none;cursor:pointer;transition:.15s}
+.tg:hover{background:#2aabee33;color:#fff}.tg svg{width:16px;height:16px;fill:var(--tg)}
+.hero{text-align:center;padding:14px 0 6px}
+.orbw{position:relative;width:150px;height:150px;margin:0 auto 14px}
+.orbw::before,.orbw::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--green2);opacity:0}
+.on .orbw::before{animation:ring 2.8s infinite}.on .orbw::after{animation:ring 2.8s 1.4s infinite}
+@keyframes ring{0%{transform:scale(.8);opacity:.5}100%{transform:scale(1.35);opacity:0}}
+.orb{position:absolute;inset:9px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#6d777e,#171b1e 74%);box-shadow:0 12px 40px #000a,inset 0 1px 0 #ffffff22;transition:.5s}
+.orb svg{position:absolute;inset:0;margin:auto;width:60px;height:60px;stroke:#d7dde1;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;transition:.4s}
+.on .orb{background:radial-gradient(circle at 35% 28%,#63d680,#0d3019 76%);box-shadow:0 0 0 2px #4cc46a66,0 0 70px #34a85388,inset 0 1px 0 #ffffff33}
+.on .orb svg{stroke:#fff}
+.busy .orb{background:radial-gradient(circle at 35% 28%,#d6c15a,#2a2814 76%);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{transform:scale(1.05)}}
+h1{font-size:24px;font-weight:800;letter-spacing:-.2px;margin-bottom:4px}
+.sub{color:var(--muted);font-size:13px;min-height:19px}
+.cta{display:block;width:100%;margin-top:18px;padding:15px;border-radius:13px;background:linear-gradient(180deg,var(--green2),var(--green));color:#fff;border:0;font:700 17px Inter,sans-serif;cursor:pointer;transition:.15s;box-shadow:0 8px 22px #34a85344}
+.cta:hover{filter:brightness(1.08)}.on .cta{background:var(--panel2);border:1px solid var(--line);color:var(--text);box-shadow:none}.on .cta:hover{background:#262d33}
+.busy .cta{opacity:.6;pointer-events:none}
+.err{margin-top:10px;padding:9px 11px;border-radius:10px;background:#e0584b1f;border:1px solid #e0584b66;color:#ffb3aa;font-size:12.5px;display:none;text-align:left}
+.card{background:linear-gradient(180deg,#1a1f23,#161a1e);border:1px solid var(--line);border-radius:16px;padding:15px 16px;margin-top:14px}
+.card h2{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card h2 small{font-weight:400;color:var(--muted);font-size:12px}
+.always{border-color:#34a85355;background:linear-gradient(180deg,#18271f,#151d19)}
+details.card{padding:0}details.card>summary{list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary small{color:var(--muted);font-weight:400;font-size:12px;margin-left:8px}
+details.card>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:.2s;margin-left:auto;margin-right:2px;margin-top:-3px}
+details.card[open]>summary::after{transform:rotate(-135deg);margin-top:3px}
+details.card .in{padding:0 16px 15px}
+select,textarea,input[type=text],.inp{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font:inherit;outline:none}
+select:focus,textarea:focus,.inp:focus{border-color:var(--green)}
+textarea{font:12.5px/1.4 ui-monospace,Consolas,monospace;resize:vertical;min-height:70px}
+.row{display:flex;gap:8px;margin-top:10px}
+.btn{flex:1;padding:10px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);color:var(--text);font:600 13px Inter,sans-serif;cursor:pointer;transition:.15s}
+.btn:hover{border-color:#47525c}.btn.g{background:var(--green);border-color:var(--green);color:#fff}.btn.g:hover{background:var(--green2)}
+.btn:disabled{opacity:.5;pointer-events:none}
+.btn.danger{background:#e0584b14;border-color:#e0584b55;color:#ff9d92}.btn.danger:hover{background:#e0584b2a}.btn.danger.arm{background:var(--red);border-color:var(--red);color:#fff}
+.tl{list-style:none;padding:0;margin-top:10px;max-height:190px;overflow:auto}
+.tl li{display:flex;align-items:center;gap:9px;padding:4px 2px;font-size:13px;color:var(--muted)}
+.d{width:9px;height:9px;border-radius:50%;background:#46515a;flex:none}
+.d.ok{background:var(--green2);box-shadow:0 0 6px var(--green2)}.d.part{background:var(--amber)}.d.fail{background:var(--red)}
+.d.testing{background:#fff;animation:pulse .8s infinite}
+.tmsg{font-size:12.5px;color:var(--muted);margin-top:8px;min-height:18px}
+.chk{display:grid;grid-template-columns:1fr 1fr;gap:7px 14px}
+.chk div{display:flex;align-items:center;gap:8px;font-size:13px}.chk em{margin-left:auto;font-style:normal;color:#66727b;font-size:11.5px}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;cursor:pointer}
+.sw input{display:none}.sw .k{width:42px;height:24px;border-radius:99px;background:#3a4249;position:relative;transition:.2s;flex:none}
+.sw .k::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#eceff1;transition:.2s}
+.sw input:checked+.k{background:var(--green)}.sw input:checked+.k::after{left:21px}
+.sw span small{display:block;color:var(--muted);font-size:12px}
+.always .sw span{font-weight:700;font-size:15px}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:4px 6px 4px 12px;font-size:13px;display:inline-flex;gap:6px;align-items:center}
+.chip a{cursor:pointer;color:var(--muted);padding:0 6px}.chip a:hover{color:#fff}
+footer{margin-top:22px;text-align:center;font-size:12px;color:#66727b}
+footer .links{display:flex;justify-content:center;gap:18px;margin-bottom:12px}
+footer a{color:#7f8d97;cursor:pointer;text-decoration:underline}
+.author{display:inline-flex;align-items:center;gap:6px;color:#9aa5ad;text-decoration:none;font-size:12.5px;cursor:pointer}
+.author b{color:var(--tg)}.author:hover b{text-decoration:underline}
+pre{white-space:pre-wrap;font:11.5px/1.4 ui-monospace,Consolas,monospace;color:#9aa5ad;max-height:150px;overflow:auto;margin-top:8px;display:none;background:#0c0e10;padding:8px;border-radius:8px;text-align:left}
+</style></head>
+<body><div class="wrap" id="app">
+<header>
+  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg></span><span>Bogestv0 <b>Unblock</b><span class="ver" id="ver"></span></span></div>
+  <a class="tg" data-link="https://t.me/bogestv0" href="https://t.me/bogestv0" title="Телеграм-канал автора"><svg viewBox="0 0 24 24"><path d="M9.8 15.3l-.4 4.2c.6 0 .9-.3 1.200-.6l2.900-2.700 6 4.400c1.100.6 1.900.3 2.200-1l3.900-18.300c.4-1.600-.6-2.300-1.600-1.900L1.300 9.500c-1.500.6-1.500 1.500-.3 1.900l5.900 1.800L20.600 4.600c.6-.4 1.200-.2.700.2z"/></svg>@bogestv0</a>
+</header>
+
+<section class="hero">
+  <div class="orbw"><div class="orb"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.500-7-10V6z"/><path id="tick" d="M9 12l2.200 2.200L15.500 10" style="opacity:0"/></svg></div></div>
+  <h1 id="title">Обход выключен</h1>
+  <div class="sub" id="sub">Discord и YouTube могут не открываться</div>
+  <button class="cta" id="cta">Включить обход</button>
+  <div class="err" id="err"></div>
+</section>
+
+<div class="card always">
+  <label class="sw"><span>Всегда включён<small>Запускается вместе с Windows и работает в фоне — окно не открывается и ничего не мешает</small></span><input type="checkbox" id="always"><i class="k"></i></label>
+</div>
+
+<div class="card">
+  <h2>Проверка доступа <small id="chkTime"></small></h2>
+  <div class="chk" id="chk"></div>
+  <div class="row"><button class="btn" id="check">Проверить сейчас</button></div>
+</div>
+
+<div class="card" id="dnscard" style="display:none;border-color:#e0584b88">
+  <h2>Не находятся адреса сайтов (DNS)</h2>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Провайдер блокирует или подменяет ответы DNS — обход пакетов тут не поможет, пока DNS не заменён. Нажмите кнопку: программа поставит DNS Cloudflare и Google (1.1.1.1 / 8.8.8.8). Вернуть можно в любой момент.</p>
+  <div class="row"><button class="btn g" id="dnson">Исправить DNS</button><button class="btn" id="dnsoff">Вернуть как было</button></div>
+</div>
+
+<div class="card">
+  <h2>Стратегия <small id="curStrat"></small></h2>
+  <select id="strat"></select>
+  <div class="row"><button class="btn g" id="tune">⚡ Подобрать автоматически</button></div>
+  <ul class="tl" id="tl"></ul><div class="tmsg" id="tmsg"></div>
+</div>
+
+<details class="card"><summary>Что обходить</summary><div class="in">
+  <label class="sw"><span>Discord<small>чат, звонки, обновления</small></span><input type="checkbox" id="discord"><i class="k"></i></label>
+  <label class="sw"><span>YouTube<small>видео, картинки, плеер</small></span><input type="checkbox" id="youtube"><i class="k"></i></label>
+  <label class="sw"><span>Все HTTPS-сайты<small>обход для любых сайтов, не только из списков</small></span><input type="checkbox" id="allsites"><i class="k"></i></label>
+  <label class="sw"><span>Отключать QUIC (UDP 443)<small>браузер перейдёт на обычное соединение — YouTube работает стабильнее</small></span><input type="checkbox" id="blockquic"><i class="k"></i></label>
+</div></details>
+
+<details class="card"><summary>Программы<small>обход для выбранных приложений</small></summary><div class="in">
+  <div id="appchips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+  <div class="row" style="margin-top:0"><select id="procsel"><option value="">Выбрать из запущенных…</option></select><button class="btn" id="procadd" style="flex:0 0 auto">Добавить</button></div>
+  <div class="row"><input id="procman" class="inp" placeholder="или имя файла, например telegram.exe" style="flex:1"><button class="btn" id="procadd2" style="flex:0 0 auto">Добавить</button></div>
+  <p style="color:var(--muted);font-size:12px;margin-top:8px">Программа должна быть запущена и подключаться по HTTPS. Для браузера обход применится ко всем сайтам в нём.</p>
+</div></details>
+
+<details class="card"><summary>Свои сайты<small>по одному в строке</small></summary><div class="in">
+  <textarea id="user" placeholder="например:&#10;example.com"></textarea>
+  <div class="row"><button class="btn" id="saveUser">Сохранить</button></div>
+</div></details>
+
+<details class="card"><summary>Удаление</summary><div class="in">
+  <p style="color:var(--muted);font-size:13px">Выключит обход, вернёт DNS (если меняли), уберёт автозапуск, драйвер, ярлыки и все файлы программы.</p>
+  <div class="row"><button class="btn danger" id="uninst">Удалить программу</button></div>
+</div></details>
+
+<footer>
+  <div class="links"><a id="logLink">Журнал</a><a id="quit">Выйти из программы</a></div>
+  <a class="author" data-link="https://t.me/bogestv0" href="https://t.me/bogestv0">Автор: <b>Bogestv0</b> · Telegram-канал t.me/bogestv0</a>
+</footer>
+<pre id="log"></pre>
+</div>
+<script>
+const T='__TOKEN__';const $=s=>document.querySelector(s);
+const api=(p,b)=>fetch('/api/'+p,{method:b?'POST':'GET',headers:{'X-Token':T,'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined}).then(r=>r.json());
+let S=null,busy=false;
+function fmt(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+' ч '+m+' мин':m?m+' мин':s+' с'}
+function render(){
+  if(!S)return; const app=$('#app');
+  app.className='wrap '+(busy?'busy':S.running?'on':'');
+  $('#tick').style.opacity=S.running?1:0;
+  $('#ver').textContent='v'+S.version;
+  if(busy){$('#title').textContent='Подождите…';$('#sub').textContent='';$('#cta').textContent='…'}
+  else if(S.running){$('#title').textContent='Обход включён';const st=S.stats||{};$('#sub').textContent='«'+S.active+'» · '+fmt(S.uptime)+' · обработано соединений: '+(st.tcp||0);$('#cta').textContent='Выключить обход'}
+  else{$('#title').textContent='Обход выключен';$('#sub').textContent='Discord и YouTube могут не открываться';$('#cta').textContent='Включить обход'}
+  const sel=$('#strat');
+  if(!sel.options.length){S.strategies.forEach(n=>sel.add(new Option(n,n)))}
+  if(document.activeElement!==sel)sel.value=S.settings.strategy;
+  $('#curStrat').textContent=S.running&&S.active!==S.settings.strategy?'работает: '+S.active:'';
+  const g=S.settings;if(!document.querySelector('.sw input:focus')){$('#always').checked=g.autoStart&&g.autoEnable;$('#discord').checked=g.discord;$('#youtube').checked=g.youtube;$('#allsites').checked=g.allSites;$('#blockquic').checked=g.blockQuic;if(!appsInit){APPS=g.apps||[];appsInit=true;drawApps()}}
+  const t=S.tune;$('#tune').textContent=t.running?'■ Остановить подбор':'⚡ Подобрать автоматически';
+  $('#tl').innerHTML=(t.items||[]).filter(i=>t.running||t.done||i.status!=='pending').map(i=>`<li><i class="d ${i.status}"></i>${i.name}</li>`).join('');
+  $('#tmsg').textContent=t.msg||'';if((t.msg||'').indexOf('DNS')>=0)$('#dnscard').style.display='block';
+  const tl=$('#tl');const cur=tl.querySelector('.testing');if(cur)cur.scrollIntoView({block:'nearest'});
+}
+let wasTuning=false;
+async function refresh(){try{S=await api('state');render();if(wasTuning&&!S.tune.running&&S.running)check();wasTuning=S.tune.running}catch(e){$('#title').textContent='Нет связи с программой'}}
+function err(m){const e=$('#err');e.textContent=m||'';e.style.display=m?'block':'none'}
+$('#cta').onclick=async()=>{err('');busy=true;render();
+  const r=S.running?await api('stop',{}):await api('start',{strategy:$('#strat').value});
+  busy=false;if(r&&r.ok===false)err(r.error);await refresh();if(!S.running)return;check()};
+$('#strat').onchange=async()=>{if(S.running){busy=true;render();const r=await api('start',{strategy:$('#strat').value});busy=false;if(r.ok===false)err(r.error)}
+  else{await api('start',{strategy:$('#strat').value});await api('stop',{})}await refresh()};
+$('#tune').onclick=async()=>{err('');if(S.tune.running)await api('tune-cancel',{});else{const r=await api('tune',{});if(r.ok===false)err(r.error)}refresh()};
+async function check(){$('#check').disabled=true;$('#chkTime').textContent='проверяю…';
+  const r=await api('check');$('#check').disabled=false;
+  $('#dnscard').style.display=r.some(x=>(x.err||'').startsWith('DNS'))?'block':'none';
+  $('#chk').innerHTML=r.map(x=>`<div><i class="d ${x.ok?'ok':'fail'}"></i>${x.group}: ${x.name}<em>${x.ok?x.ms+' мс':(x.err||'')}</em></div>`).join('');
+  $('#chkTime').textContent=new Date().toLocaleTimeString().slice(0,5)}
+$('#check').onclick=check;
+const setS=async()=>{await api('settings',{autoStart:$('#always').checked,autoEnable:$('#always').checked,discord:$('#discord').checked,youtube:$('#youtube').checked,allSites:$('#allsites').checked,blockQuic:$('#blockquic').checked,apps:APPS});refresh()};
+['always','discord','youtube','allsites','blockquic'].forEach(i=>$('#'+i).onchange=setS);
+$('#saveUser').onclick=async()=>{await api('userlist',{Text:$('#user').value});$('#saveUser').textContent='Сохранено ✓';setTimeout(()=>$('#saveUser').textContent='Сохранить',1500);refresh()};
+$('#logLink').onclick=async()=>{const p=$('#log');if(p.style.display==='block'){p.style.display='none';return}const r=await api('log');p.textContent=r.text||'(пусто)';p.style.display='block'};
+$('#quit').onclick=async()=>{if(confirm('Выйти и остановить обход?')){await api('quit',{});document.body.innerHTML='<p style="padding:40px;text-align:center;color:#9aa5ad">Программа закрыта. Можно закрыть это окно.</p>'}};
+
+$('#dnson').onclick=async()=>{$('#dnson').textContent='Применяю…';const r=await api('dns',{On:true});$('#dnson').textContent=r.ok?'Готово ✓':'Ошибка';if(r.ok===false)err(r.error);setTimeout(()=>{$('#dnson').textContent='Исправить DNS';check()},2500)};
+$('#dnsoff').onclick=async()=>{await api('dns',{On:false});$('#dnsoff').textContent='Возвращено ✓';setTimeout(()=>$('#dnsoff').textContent='Вернуть как было',2000)};
+document.querySelectorAll('[data-link]').forEach(a=>a.onclick=e=>{e.preventDefault();api('openlink',{URL:a.dataset.link})});
+let unArmed=false,unT=null;
+$('#uninst').onclick=async()=>{const b=$('#uninst');
+  if(!unArmed){unArmed=true;b.textContent='Точно удалить? Нажмите ещё раз';b.classList.add('arm');unT=setTimeout(()=>{unArmed=false;b.textContent='Удалить программу';b.classList.remove('arm')},5000);return}
+  clearTimeout(unT);b.disabled=true;b.textContent='Удаляю…';const r=await api('uninstall',{});
+  if(r.ok===false){b.disabled=false;unArmed=false;b.classList.remove('arm');b.textContent='Удалить программу';err(r.error);window.scrollTo(0,0);return}
+  document.body.innerHTML='<div style="padding:70px 24px;text-align:center;color:#9aa5ad"><div style="font-size:42px">✓</div><h2 style="color:#f1f3f4;margin:10px 0">Bogestv0 Unblock удалён</h2><p>Обход выключен, файлы и драйвер убираются. Окно можно закрыть.</p></div>'};
+let APPS=[];
+function drawApps(){const c=$('#appchips');c.innerHTML='';if(!APPS.length){c.innerHTML='<span style="color:var(--muted);font-size:13px">Пока не выбрано</span>'}
+ APPS.forEach(a=>{const b=document.createElement('span');b.className='chip';b.textContent=a;const x=document.createElement('a');x.textContent='✕';x.onclick=()=>{APPS=APPS.filter(z=>z!==a);drawApps();setS()};b.appendChild(x);c.appendChild(b)})}
+function addApp(n){n=(n||'').trim().toLowerCase();if(!n)return;if(!/\.exe$/.test(n))n+='.exe';if(!APPS.includes(n)){APPS.push(n);drawApps();setS()}}
+$('#procadd').onclick=()=>{addApp($('#procsel').value);$('#procsel').value=''};
+$('#procadd2').onclick=()=>{addApp($('#procman').value);$('#procman').value=''};
+$('#procsel').onfocus=async()=>{const r=await api('procs');const sel=$('#procsel');const cur=sel.value;sel.innerHTML='<option value="">Выбрать из запущенных…</option>'+(r.procs||[]).map(n=>'<option>'+n+'</option>').join('');sel.value=cur};
+let appsInit=false;
+api('userlist').then(r=>$('#user').value=r.text||'');
+refresh();setInterval(refresh,1500);check();
+</script></body></html>
