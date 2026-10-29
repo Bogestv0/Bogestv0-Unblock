@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -154,17 +155,21 @@ type Target struct {
 	Group string `json:"group"`
 	Name  string `json:"name"`
 	URL   string `json:"url"`
+	Body  int    `json:"-"` // сколько байт ответа прочитать (0 — достаточно рукопожатия TLS и заголовков)
 }
 
 var Targets = []Target{
-	{"Discord", "discord.com", "https://discord.com/api/v10/gateway"},
-	{"Discord", "gateway", "https://gateway.discord.gg/?v=10&encoding=json"},
-	{"Discord", "cdn", "https://cdn.discordapp.com/"},
-	{"Discord", "updates", "https://updates.discord.com/"},
-	{"YouTube", "youtube.com", "https://www.youtube.com/"},
-	{"YouTube", "картинки", "https://i.ytimg.com/generate_204"},
-	{"YouTube", "видео", "https://redirector.googlevideo.com/"},
+	{"Discord", "discord.com", "https://discord.com/api/v10/gateway", 0},
+	{"Discord", "gateway", "https://gateway.discord.gg/?v=10&encoding=json", 0},
+	{"Discord", "cdn", "https://cdn.discordapp.com/", 0},
+	{"Discord", "updates", "https://updates.discord.com/", 0},
+	// главная страница YouTube большая: читаем её кусок, чтобы поймать провайдеров, которые рвут соединение уже после рукопожатия
+	{"YouTube", "youtube.com", "https://www.youtube.com/", 60000},
+	{"YouTube", "картинки", "https://i.ytimg.com/generate_204", 0},
+	{"YouTube", "видео", "https://redirector.googlevideo.com/", 0},
 }
+
+const checkTimeout = 7 * time.Second
 
 type CheckResult struct {
 	Target
@@ -176,7 +181,7 @@ type CheckResult struct {
 // только для тестов разработчика: BOGESTV0_FAKE=<имя стратегии> имитирует «работает только эта стратегия»
 var fakeGood = os.Getenv("BOGESTV0_FAKE")
 
-func check(ctx context.Context, t Target) CheckResult {
+func check(ctx context.Context, t Target, timeout time.Duration) CheckResult {
 	r := CheckResult{Target: t}
 	if fakeGood != "" {
 		time.Sleep(40 * time.Millisecond)
@@ -187,21 +192,31 @@ func check(ctx context.Context, t Target) CheckResult {
 		}
 		return r
 	}
-	tr := &http.Transport{Proxy: nil, DisableKeepAlives: true, TLSHandshakeTimeout: 5 * time.Second,
+	d := &net.Dialer{Timeout: timeout - 2*time.Second}
+	tr := &http.Transport{Proxy: nil, DisableKeepAlives: true, TLSHandshakeTimeout: timeout - 2*time.Second,
 		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-		DialContext:     (&net.Dialer{Timeout: 5 * time.Second}).DialContext}
-	cl := &http.Client{Transport: tr, Timeout: 7 * time.Second,
+		// только IPv4: обход умеет работать лишь с ним, а проверка должна показывать то, что обход способен исправить
+		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp4", addr) }}
+	cl := &http.Client{Transport: tr, Timeout: timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	req, _ := http.NewRequestWithContext(ctx, "GET", t.URL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Bogestv0Unblock")
 	t0 := time.Now()
 	resp, err := cl.Do(req)
-	r.MS = time.Since(t0).Milliseconds()
 	if err != nil {
+		r.MS = time.Since(t0).Milliseconds()
 		r.Err = shortErr(err)
 		return r
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if t.Body > 0 { // ответ может быть и короче — это нормально; ошибкой считается обрыв/зависание по ходу чтения
+		if _, err := io.CopyN(io.Discard, resp.Body, int64(t.Body)); err != nil && err != io.EOF {
+			r.MS = time.Since(t0).Milliseconds()
+			r.Err = shortErr(err)
+			return r
+		}
+	}
+	r.MS = time.Since(t0).Milliseconds()
 	r.OK = true // любой HTTP-ответ: соединение и TLS прошли
 	return r
 }
@@ -224,28 +239,18 @@ func shortErr(err error) string {
 	return s
 }
 
-func checkAll(ctx context.Context) []CheckResult {
-	res := make([]CheckResult, len(Targets))
+func checkList(ctx context.Context, list []Target, timeout time.Duration) []CheckResult {
+	res := make([]CheckResult, len(list))
 	var wg sync.WaitGroup
-	for i, t := range Targets {
+	for i, t := range list {
 		wg.Add(1)
-		go func(i int, t Target) { defer wg.Done(); res[i] = check(ctx, t) }(i, t)
+		go func(i int, t Target) { defer wg.Done(); res[i] = check(ctx, t, timeout) }(i, t)
 	}
 	wg.Wait()
 	return res
 }
 
-func score(res []CheckResult) (discord, total int) {
-	for _, r := range res {
-		if r.OK {
-			total++
-			if r.Group == "Discord" {
-				discord++
-			}
-		}
-	}
-	return
-}
+func checkAll(ctx context.Context) []CheckResult { return checkList(ctx, Targets, checkTimeout) }
 
 /* ---------------- автоподбор ---------------- */
 
@@ -300,33 +305,65 @@ func (e *Engine) CancelTune() {
 	e.mu.Unlock()
 }
 
+// tuneTargets: что должно открываться для успеха — только включённые в настройках группы.
+func (e *Engine) tuneTargets() []Target {
+	e.mu.Lock()
+	ds, ys := e.settings.Discord, e.settings.YouTube
+	e.mu.Unlock()
+	if !ds && !ys {
+		ds, ys = true, true
+	}
+	var out []Target
+	for _, t := range Targets {
+		if (t.Group == "Discord" && ds) || (t.Group == "YouTube" && ys) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func failedNames(res []CheckResult) []string {
+	var out []string
+	for _, r := range res {
+		if !r.OK {
+			out = append(out, r.Group+": "+r.Name)
+		}
+	}
+	return out
+}
+
 func (e *Engine) runTune(ctx context.Context, t *TuneState) {
 	set := func(f func()) { e.mu.Lock(); f(); e.mu.Unlock() }
 	finish := func(msg string) { set(func() { t.Running, t.Done, t.Msg = false, true, msg }) }
+	const tuneTimeout = 5 * time.Second
 	e.Stop()
-	nd := 0
-	for _, x := range Targets {
-		if x.Group == "Discord" {
-			nd++
-		}
-	}
-	base := checkAll(ctx)
-	if d, _ := score(base); d == nd {
-		finish("Discord и так открывается без обхода — включать его не нужно.")
+	want := e.tuneTargets()
+	base := checkList(ctx, want, tuneTimeout)
+	if len(failedNames(base)) == 0 {
+		finish("Всё открывается и без обхода — включать его не нужно.")
 		return
 	}
-	dnsFail := 0
-	for _, r := range base {
+	// имена, которые не находятся из-за DNS, обходом не исправить: не требуем их и подсказываем про DNS
+	var need []Target
+	var dnsNames []string
+	for i, r := range base {
 		if strings.HasPrefix(r.Err, "DNS") {
-			dnsFail++
+			dnsNames = append(dnsNames, r.Group+": "+r.Name)
+		} else {
+			need = append(need, want[i])
 		}
 	}
-	if dnsFail*2 >= len(base) {
+	dnsHint := ""
+	if len(dnsNames) > 0 {
+		dnsHint = " Не находятся по DNS: " + strings.Join(dnsNames, ", ") + " — включите «Исправить DNS» в блоке ниже."
+	}
+	if len(need) == 0 || len(dnsNames)*2 >= len(base) {
 		finish("Адреса сайтов не находятся: провайдер блокирует DNS. Нажмите «Исправить DNS» в блоке ниже и повторите подбор.")
 		set(func() { t.Items = nil })
 		return
 	}
-	bestName, bestScore := "", 0
+	bestName, bestScore, bestFull := "", 0, false
+	var bestFail []string
 	for i := range e.strategies {
 		if ctx.Err() != nil {
 			e.Stop()
@@ -345,25 +382,35 @@ func (e *Engine) runTune(ctx context.Context, t *TuneState) {
 			return
 		}
 		time.Sleep(500 * time.Millisecond)
-		d, tot := score(checkAll(ctx))
-		sc := d*2 + tot
+		res := checkList(ctx, need, tuneTimeout)
+		fails := failedNames(res)
+		full := len(fails) == 0
+		if full { // подтверждаем вторым прогоном — чтобы не принять за рабочий случайный успех
+			time.Sleep(700 * time.Millisecond)
+			res2 := checkList(ctx, need, tuneTimeout)
+			if f2 := failedNames(res2); len(f2) > 0 {
+				full, fails = false, f2
+			}
+		}
+		sc := len(need) - len(fails)
 		st := "fail"
-		if d == nd {
+		switch {
+		case full:
 			st = "ok"
-		} else if d > 0 {
+		case sc > 0:
 			st = "part"
 		}
 		set(func() { t.Items[i].Status, t.Items[i].Score = st, sc })
-		if sc > bestScore {
-			bestScore, bestName = sc, name
+		if full || sc > bestScore {
+			bestName, bestScore, bestFull, bestFail = name, sc, full, fails
 		}
-		if d == nd && tot == len(Targets) {
+		if full {
 			break
 		}
 	}
-	if bestName == "" {
+	if bestName == "" || bestScore == 0 {
 		e.Stop()
-		finish("Ни одна стратегия не сработала. Проверьте интернет и смените DNS (например, на 1.1.1.1), затем повторите подбор.")
+		finish("Ни одна стратегия не сработала. Проверьте интернет и смените DNS (например, на 1.1.1.1), затем повторите подбор." + dnsHint)
 		return
 	}
 	if err := e.Start(bestName); err != nil {
@@ -371,5 +418,9 @@ func (e *Engine) runTune(ctx context.Context, t *TuneState) {
 		return
 	}
 	set(func() { e.settings.Strategy = bestName; e.saveSettings(); t.Best = bestName })
-	finish("Готово! Выбрана стратегия «" + bestName + "» — обход включён.")
+	if bestFull {
+		finish("Готово! Выбрана стратегия «" + bestName + "» — обход включён." + dnsHint)
+		return
+	}
+	finish("Полностью рабочей стратегии не нашлось. Включена лучшая — «" + bestName + "», но не открывается: " + strings.Join(bestFail, ", ") + "." + dnsHint)
 }

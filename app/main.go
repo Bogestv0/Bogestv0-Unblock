@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	_ "embed"
 	"encoding/hex"
@@ -22,7 +23,7 @@ const port = "47821"
 
 // подставляются при сборке: -X main.version=… -X main.ghRepo=владелец/репозиторий
 var (
-	version = "2.4.0"
+	version = "2.4.1"
 	ghRepo  = ""
 )
 
@@ -205,8 +206,13 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		e.settings.DNSSet = in.On
 		e.saveSettings()
 		e.mu.Unlock()
-		e.logf("DNS: " + map[bool]string{true: "установлены 1.1.1.1 / 8.8.8.8", false: "возвращены автоматические"}[in.On])
-		jsonOut(w, map[string]any{"ok": true})
+		e.logf("DNS: " + map[bool]string{true: "установлены 1.1.1.1 / 8.8.8.8", false: "возвращены прежние"}[in.On])
+		out := map[string]any{"ok": true}
+		if in.On && !dnsResolves("www.youtube.com") { // DNS поставлен, но имя всё равно не находится — значит, провайдер перехватывает запросы
+			out["warn"] = "DNS заменён, но youtube.com всё ещё не находится: провайдер перехватывает DNS-запросы. Включите «Безопасный DNS» в браузере (Настройки → Конфиденциальность → Использовать безопасный DNS → Cloudflare) или DNS-over-HTTPS в Windows 11."
+			e.logf("DNS: после замены youtube.com не находится (перехват DNS провайдером)")
+		}
+		jsonOut(w, out)
 	case "openlink":
 		var in struct{ URL string }
 		json.NewDecoder(r.Body).Decode(&in)
@@ -223,8 +229,11 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		e.mu.Lock()
 		dns := e.settings.DNSSet
 		e.mu.Unlock()
-		if dns {
+		// DNS возвращаем, только если его менял именно обход и им не пользуется Bogestv0 VPN
+		if dns && !vpnOwnsDNS() {
 			setDNS(false)
+		} else if dns {
+			e.logf("удаление: DNS не тронут — им пользуется Bogestv0 VPN")
 		}
 		e.Stop()
 		if err := startUninstaller(un); err != nil {
@@ -309,6 +318,15 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// dnsResolves: находится ли имя системным DNS (после сброса кэша).
+func dnsResolves(host string) bool {
+	time.Sleep(600 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	a, err := net.DefaultResolver.LookupHost(ctx, host)
+	return err == nil && len(a) > 0
 }
 
 // Вызывается деинсталлятором.

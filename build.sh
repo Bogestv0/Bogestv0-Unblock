@@ -2,7 +2,7 @@
 # Сборка Bogestv0-Unblock-Setup.exe (нужен Go 1.21+). Запускать из корня репозитория.
 set -e
 cd "$(dirname "$0")"
-VERSION="${VERSION:-2.4.0}"   # в релизе берётся из тега (v2.3.1 → 2.3.1)
+VERSION="${VERSION:-2.4.1}"   # в релизе берётся из тега (v2.3.1 → 2.3.1)
 REPO="${REPO:-}"            # владелец/репозиторий — для проверки обновлений (в Actions подставляется сам)
 (cd app && go test ./... )
 rm -rf installer/assets && mkdir -p installer/assets dist

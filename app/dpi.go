@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"sort"
+	"strings"
 	"sync/atomic"
 )
 
@@ -123,43 +125,84 @@ func (c *Core) tcp(p *ip4) ([][]byte, bool) {
 		fake := buildFakeClientHello(or2(st.FakeSNI, "www.google.com"))
 		for i := 0; i < max(1, st.FakeRepeat); i++ {
 			o := tcpOpts{seq: seq, flags: tcpACK | tcpPSH, id: c.nextID(), ttl: ttl}
-			switch st.Fake {
-			case "ttl":
+			if st.fakeHas("ttl") {
 				o.ttl = byte(st.FakeTTL)
-			case "badsum":
+			}
+			if st.fakeHas("badsum") {
 				o.badSum = true
-			case "badseq":
+			}
+			if st.fakeHas("badseq") {
 				o.seq = seq - 10000 - uint32(i)*1500
 			}
+			o.md5 = st.fakeHas("md5sig")
 			outs = append(outs, buildTCP(p, fake, o))
 		}
 	}
 
-	k := 0
-	switch st.Split {
-	case "pos":
-		k = st.SplitPos
-	case "sni":
-		k = off + n/2
-		if !tls {
-			k = 2
+	// точки разреза внутри первого пакета данных
+	var cuts []int
+	if st.Split == "pos" {
+		cuts = append(cuts, st.SplitPos)
+	}
+	if st.Split == "sni" || (st.Split == "pos" && st.AlsoSNI) {
+		if tls {
+			cuts = append(cuts, sniCut(host, off, n))
+		} else {
+			cuts = append(cuts, 2)
 		}
 	}
-	if st.Split != "" && !tls && k <= 0 {
-		k = 2
-	}
-	if k <= 0 || k >= len(pl) {
+	cuts = normCuts(cuts, len(pl))
+	if len(cuts) == 0 {
 		outs = append(outs, append([]byte(nil), p.b[:p.total]...))
 		return outs, true
 	}
-	p1 := buildTCP(p, pl[:k], tcpOpts{seq: seq, flags: flags &^ (tcpPSH | tcpFIN), id: p.id(), ttl: ttl})
-	p2 := buildTCP(p, pl[k:], tcpOpts{seq: seq + uint32(k), flags: flags, id: c.nextID(), ttl: ttl})
-	if st.Disorder {
-		outs = append(outs, p2, p1)
-	} else {
-		outs = append(outs, p1, p2)
+	var segs [][]byte
+	prev := 0
+	for i, k := range append(cuts, len(pl)) {
+		f := flags
+		if i < len(cuts) {
+			f &^= tcpPSH | tcpFIN // PSH/FIN — только у последней части
+		}
+		id := c.nextID()
+		if i == 0 {
+			id = p.id()
+		}
+		segs = append(segs, buildTCP(p, pl[prev:k], tcpOpts{seq: seq + uint32(prev), flags: f, id: id, ttl: ttl}))
+		prev = k
 	}
-	return outs, true
+	if st.Disorder { // обратный порядок отправки
+		for i, j := 0, len(segs)-1; i < j; i, j = i+1, j-1 {
+			segs[i], segs[j] = segs[j], segs[i]
+		}
+	}
+	return append(outs, segs...), true
+}
+
+// sniCut — где резать имя сайта: в середине главного домена («googlevideo» в rr1---sn-x.googlevideo.com).
+// Резать надо внутри того слова, по которому блокируют: если граница попадёт в «хвост» поддомена,
+// слово целиком окажется в одном пакете и провайдер его увидит.
+func sniCut(host string, off, n int) int {
+	dot := strings.LastIndexByte(host, '.')
+	if dot <= 0 {
+		return off + n/2
+	}
+	start := strings.LastIndexByte(host[:dot], '.') + 1
+	if dot-start < 2 {
+		return off + dot
+	}
+	return off + start + (dot-start)/2
+}
+
+// normCuts: убрать повторы и выход за границы, отсортировать.
+func normCuts(c []int, size int) []int {
+	sort.Ints(c)
+	var out []int
+	for _, k := range c {
+		if k > 0 && k < size && (len(out) == 0 || out[len(out)-1] != k) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 func (c *Core) udp(p *ip4) ([][]byte, bool) {

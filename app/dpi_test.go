@@ -127,22 +127,27 @@ func TestAllStrategiesTCP(t *testing.T) {
 				pl := p.tcpPayload()
 				if h, _, _, ok := parseSNI(pl); ok && h == or2(st.FakeSNI, "www.google.com") && st.Fake != "" {
 					fakes++
-					switch st.Fake {
-					case "ttl":
-						if int(p.b[8]) != st.FakeTTL {
-							t.Fatalf("TTL фейка %d", p.b[8])
-						}
-						if !p.checksumsValid() {
-							t.Fatal("фейк-ttl с плохой суммой")
-						}
-					case "badsum":
-						if p.checksumsValid() {
-							t.Fatal("badsum-фейк с верной суммой")
-						}
-					case "badseq":
-						if p.seq() == 0xFFFFFF00 {
-							t.Fatal("badseq не сдвинул seq")
-						}
+					if st.fakeHas("ttl") && int(p.b[8]) != st.FakeTTL {
+						t.Fatalf("TTL фейка %d", p.b[8])
+					}
+					if st.fakeHas("badsum") == p.checksumsValid() {
+						t.Fatalf("badsum=%v, а сумма верна=%v", st.fakeHas("badsum"), p.checksumsValid())
+					}
+					if st.fakeHas("badseq") == (p.seq() == 0xFFFFFF00) {
+						t.Fatal("badseq и seq не согласованы")
+					}
+					if !st.fakeHas("badseq") && p.seq() != 0xFFFFFF00 {
+						t.Fatal("seq фейка не должен меняться")
+					}
+					if !st.fakeHas("ttl") && p.b[8] != 128 {
+						t.Fatalf("TTL фейка без ttl-приёма изменён: %d", p.b[8])
+					}
+					hasMD5 := p.tcpHdrLen() > 20 && bytes.Contains(p.b[p.ihl+20:p.ihl+p.tcpHdrLen()], []byte{19, 18})
+					if st.fakeHas("md5sig") != hasMD5 {
+						t.Fatalf("md5sig=%v, опция в заголовке=%v", st.fakeHas("md5sig"), hasMD5)
+					}
+					if p.tcpHdrLen()%4 != 0 || p.ihl+p.tcpHdrLen() > p.total {
+						t.Fatal("заголовок TCP фейка испорчен")
 					}
 					continue
 				}
@@ -171,14 +176,25 @@ func TestAllStrategiesTCP(t *testing.T) {
 			if !bytes.Equal(got, ch) {
 				t.Fatal("поток после разрезания не совпал с оригиналом")
 			}
-			if st.Split != "" && len(real) != 2 {
-				t.Fatalf("ожидалось 2 части, получено %d", len(real))
-			}
-			// порядок отправки
+			wantParts := 1
 			if st.Split != "" {
-				first, _ := parseIPv4(outs[len(outs)-2])
-				if st.Disorder == (first.seq() == 0xFFFFFF00) {
-					t.Fatalf("неверный порядок отправки (disorder=%v)", st.Disorder)
+				wantParts = 2
+				if st.Split == "pos" && st.AlsoSNI {
+					wantParts = 3
+				}
+			}
+			if len(real) != wantParts {
+				t.Fatalf("ожидалось частей %d, получено %d", wantParts, len(real))
+			}
+			// порядок отправки: настоящие части идут в конце, по возрастанию seq или (disorder) по убыванию
+			if wantParts > 1 {
+				var seqs []uint32
+				for _, o := range outs[len(outs)-wantParts:] {
+					p, _ := parseIPv4(o)
+					seqs = append(seqs, p.seq()-0xFFFFFF00)
+				}
+				if st.Disorder != sort.SliceIsSorted(seqs, func(i, j int) bool { return seqs[i] > seqs[j] }) {
+					t.Fatalf("неверный порядок отправки (disorder=%v): %v", st.Disorder, seqs)
 				}
 			}
 			// повторный пакет того же потока пропускается как есть
@@ -271,6 +287,46 @@ func TestSNIMid(t *testing.T) {
 	k := len(p1.tcpPayload())
 	if !(k > off && k < off+n) {
 		t.Fatalf("граница %d вне имени [%d,%d)", k, off, off+n)
+	}
+}
+
+func TestSNICutInsideMainDomain(t *testing.T) {
+	// длинное имя googlevideo: граница обязана попасть внутрь слова «googlevideo», а не в поддомен
+	for _, h := range []string{"rr3---sn-8ph2xajvh-n8vs.googlevideo.com", "redirector.googlevideo.com", "www.youtube.com", "gateway.discord.gg", "cdn.discordapp.com", "t.me"} {
+		ch := realClientHello(h)
+		host, off, n, ok := parseSNI(ch)
+		if !ok || host != h {
+			t.Fatalf("SNI %q не разобран", h)
+		}
+		k := sniCut(host, off, n)
+		dot := strings.LastIndexByte(h, '.')
+		start := strings.LastIndexByte(h[:dot], '.') + 1
+		if k < off+start || k > off+dot {
+			t.Fatalf("%s: граница %d вне главного домена [%d,%d]", h, k, off+start, off+dot)
+		}
+		if dot-start >= 2 && (k == off+start || k == off+dot) {
+			t.Fatalf("%s: граница на краю слова", h)
+		}
+	}
+}
+
+func TestStrategyNamesUnique(t *testing.T) {
+	seen := map[string]bool{}
+	for _, s := range strategies() {
+		if seen[s.Name] {
+			t.Fatalf("повтор имени %q", s.Name)
+		}
+		seen[s.Name] = true
+	}
+}
+
+func TestMD5OptionKeepsPacketValid(t *testing.T) {
+	ch := realClientHello("www.youtube.com")
+	orig, _ := parseIPv4(mkTCP(50100, 443, 5, tcpACK|tcpPSH, ch))
+	out := buildTCP(orig, ch[:100], tcpOpts{seq: 5, flags: tcpACK, id: 1, ttl: 64, md5: true})
+	p, ok := parseIPv4(out)
+	if !ok || !p.checksumsValid() || p.tcpHdrLen() != 40 || len(p.tcpPayload()) != 100 {
+		t.Fatalf("md5-пакет некорректен: hdr=%d pl=%d", p.tcpHdrLen(), len(p.tcpPayload()))
 	}
 }
 

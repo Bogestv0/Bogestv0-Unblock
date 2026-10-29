@@ -22,7 +22,7 @@ import (
 //go:embed all:assets
 var assets embed.FS
 
-var version = "2.4.0"
+var version = "2.4.1"
 
 const (
 	appExe = "Bogestv0-Unblock.exe"
@@ -146,7 +146,7 @@ func install(dest string) {
 	regAdd("DisplayVersion", version)
 	regAdd("Publisher", "Bogestv0")
 	regAdd("InstallLocation", dest)
-	regAdd("DisplayIcon", filepath.Join(dest, "Bogestv0-Unblock.ico"))
+	regAdd("DisplayIcon", exe+",0")
 	regAdd("UninstallString", `"`+filepath.Join(dest, "uninstall.exe")+`" --uninstall`)
 
 	say("[4/4] Готово!\n")
@@ -166,10 +166,13 @@ func install(dest string) {
 }
 
 func shortcuts(exe, dest string) {
+	// Иконка берётся из самого exe (она вшита в файл), а не из отдельного .ico — так Windows
+	// не подставляет старую картинку из своего кэша иконок.
 	ps := fmt.Sprintf(`$w=New-Object -ComObject WScript.Shell
-$paths=@([Environment]::GetFolderPath('Desktop'), (Join-Path ([Environment]::GetFolderPath('Programs')) ''))
-foreach($d in $paths){ $s=$w.CreateShortcut((Join-Path $d 'Bogestv0 Unblock.lnk')); $s.TargetPath='%s'; $s.WorkingDirectory='%s'; $s.IconLocation='%s,0'; $s.Description='Bogestv0 Unblock'; $s.Save() }`, exe, dest, filepath.Join(dest, "Bogestv0-Unblock.ico"))
+$paths=@([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))
+foreach($d in $paths){ if(-not $d){continue}; $f=Join-Path $d 'Bogestv0 Unblock.lnk'; Remove-Item -Force $f -ErrorAction SilentlyContinue; $s=$w.CreateShortcut($f); $s.TargetPath='%s'; $s.WorkingDirectory='%s'; $s.IconLocation='%s,0'; $s.Description='Bogestv0 Unblock'; $s.Save() }`, exe, dest, exe)
 	run("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps)
+	refreshIcons()
 }
 
 func regAdd(name, value string) {

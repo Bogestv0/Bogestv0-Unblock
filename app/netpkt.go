@@ -3,6 +3,7 @@ package main
 // Разбор и сборка IPv4/TCP/UDP пакетов (собственная реализация).
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 )
 
@@ -127,15 +128,27 @@ type tcpOpts struct {
 	id     uint16
 	ttl    byte
 	badSum bool
+	md5    bool // добавить TCP-опцию MD5 (kind 19): сервер без ключа такой пакет отбросит
 }
 
 // buildTCP строит пакет на основе orig (копирует заголовки), с новыми данными/seq/флагами.
 func buildTCP(orig *ip4, payload []byte, o tcpOpts) []byte {
 	th := orig.tcpHdrLen()
+	var extra []byte // опция MD5: kind=19, len=18, 16 байт «подписи»; выравниваем до 4 байт
+	if o.md5 && th+20 <= 60 {
+		extra = make([]byte, 20)
+		extra[0], extra[1] = 19, 18
+		rand.Read(extra[2:18])
+		extra[18], extra[19] = 1, 1 // NOP, NOP
+	}
 	hl := orig.ihl + th
-	out := make([]byte, hl+len(payload))
+	out := make([]byte, hl+len(extra)+len(payload))
 	copy(out, orig.b[:hl])
-	copy(out[hl:], payload)
+	copy(out[hl:], extra)
+	copy(out[hl+len(extra):], payload)
+	if len(extra) > 0 {
+		out[orig.ihl+12] = byte((th+len(extra))/4) << 4
+	}
 	binary.BigEndian.PutUint16(out[2:], uint16(len(out)))
 	binary.BigEndian.PutUint16(out[4:], o.id)
 	out[8] = o.ttl
