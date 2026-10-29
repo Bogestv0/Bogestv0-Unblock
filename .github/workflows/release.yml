@@ -19,7 +19,11 @@ jobs:
           go-version: '1.24'
 
       - name: Build installer
-        run: bash build.sh
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then export VERSION="${GITHUB_REF_NAME#v}"; fi
+          bash build.sh
 
       - name: Checksum
         run: cd dist && sha256sum Bogestv0-Unblock-Setup.exe > SHA256SUMS.txt && cat SHA256SUMS.txt
