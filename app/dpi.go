@@ -12,6 +12,7 @@ import (
 type flowKey struct {
 	src, dst [4]byte
 	sp, dp   uint16
+	udp      bool
 }
 
 type Core struct {
@@ -21,7 +22,8 @@ type Core struct {
 	flows     map[flowKey]struct{}
 	id        uint16
 	log       func(string)
-	procOf    func(src [4]byte, sport uint16) string // имя exe-файла, которому принадлежит соединение
+	procOf    func(src [4]byte, sport uint16) string // имя exe-файла, которому принадлежит TCP-соединение
+	udpProcOf func(src [4]byte, sport uint16) string // то же для UDP
 
 	TCPHandled atomic.Int64 // соединений, к которым применён обход
 	UDPFaked   atomic.Int64 // голосовых потоков с ложными пакетами
@@ -34,7 +36,7 @@ func NewCore(st Strategy, m *Matcher, blockQUIC bool, log func(string)) *Core {
 	}
 	var b [2]byte
 	rand.Read(b[:])
-	return &Core{st: st, m: m, blockQUIC: blockQUIC, flows: map[flowKey]struct{}{}, id: binary.BigEndian.Uint16(b[:]), log: log, procOf: tcpOwner}
+	return &Core{st: st, m: m, blockQUIC: blockQUIC, flows: map[flowKey]struct{}{}, id: binary.BigEndian.Uint16(b[:]), log: log, procOf: tcpOwner, udpProcOf: udpOwner}
 }
 
 func (c *Core) nextID() uint16 { c.id++; return c.id }
@@ -66,34 +68,52 @@ func (c *Core) Process(pkt []byte) (outs [][]byte, consumed bool) {
 	return nil, false
 }
 
+func (c *Core) appOf(f func([4]byte, uint16) string, p *ip4) bool {
+	if len(c.m.apps) == 0 || f == nil {
+		return false
+	}
+	exe := f(p.src(), p.sport())
+	return exe != "" && c.m.apps[exe]
+}
+
 func (c *Core) tcp(p *ip4) ([][]byte, bool) {
-	if !p.tcpOK() || p.dport() != 443 {
+	if !p.tcpOK() {
 		return nil, false
 	}
+	dp := p.dport()
 	pl := p.tcpPayload()
 	if len(pl) == 0 {
 		return nil, false
 	}
-	if c.seen(flowKey{p.src(), p.dst(), p.sport(), p.dport()}) {
-		return nil, false // только первый пакет с данными (ClientHello)
-	}
-	host, off, n, ok := parseSNI(pl)
-	if !ok {
+	extra := c.m.game == "apps" || c.m.game == "all" || len(c.m.ips) > 0
+	if dp != 443 && !extra {
 		return nil, false
 	}
+	if c.seen(flowKey{p.src(), p.dst(), p.sport(), dp, false}) {
+		return nil, false // только первый пакет с данными (ClientHello)
+	}
+	host, off, n, tls := parseSNI(pl)
 	why := ""
-	if c.m.Match(host) {
+	switch {
+	case tls && c.m.Match(host):
 		why = host
-	} else if len(c.m.apps) > 0 && c.procOf != nil {
-		if exe := c.procOf(p.src(), p.sport()); exe != "" && c.m.apps[exe] {
-			why = host + " [" + exe + "]"
+	case len(c.m.ips) > 0 && hasIP(c.m.ips, p.dst()):
+		why = "IP " + dstStr(p)
+		if tls {
+			why = host + " (" + why + ")"
 		}
+	case tls && c.appOf(c.procOf, p):
+		why = host + " [программа]"
+	case dp != 443 && c.m.game == "all" && dp >= 1024:
+		why = fmt.Sprintf("игры, порт %d", dp)
+	case dp != 443 && c.m.game == "apps" && c.appOf(c.procOf, p):
+		why = fmt.Sprintf("игры [программа], порт %d", dp)
 	}
 	if why == "" {
 		return nil, false
 	}
 	c.TCPHandled.Add(1)
-	c.log(fmt.Sprintf("TLS %s → «%s»", why, c.st.Name))
+	c.log(fmt.Sprintf("TCP %s → «%s»", why, c.st.Name))
 
 	st := c.st
 	seq, flags, ttl := p.seq(), p.tcpFlags(), p.b[8]
@@ -121,6 +141,12 @@ func (c *Core) tcp(p *ip4) ([][]byte, bool) {
 		k = st.SplitPos
 	case "sni":
 		k = off + n/2
+		if !tls {
+			k = 2
+		}
+	}
+	if st.Split != "" && !tls && k <= 0 {
+		k = 2
 	}
 	if k <= 0 || k >= len(pl) {
 		outs = append(outs, append([]byte(nil), p.b[:p.total]...))
@@ -150,18 +176,31 @@ func (c *Core) udp(p *ip4) ([][]byte, bool) {
 	}
 	isDiscord := len(pl) == 74 && pl[0] == 0 && pl[1] == 1 && pl[2] == 0 && pl[3] == 0x46
 	isSTUN := len(pl) >= 20 && pl[0] < 2 && binary.BigEndian.Uint32(pl[4:8]) == 0x2112A442
-	if !isDiscord && !isSTUN {
-		return nil, false
-	}
 	port := binary.BigEndian.Uint16(p.b[p.ihl+2:])
-	if c.seen(flowKey{p.src(), p.dst(), binary.BigEndian.Uint16(p.b[p.ihl:]), port}) || c.st.UDPFake == 0 {
-		return nil, false
-	}
-	c.UDPFaked.Add(1)
 	what := "STUN"
 	if isDiscord {
 		what = "голос Discord"
 	}
+	if !isDiscord && !isSTUN {
+		// игры и адреса из списка: первый пакет каждого UDP-потока
+		if c.st.UDPFake == 0 || port == 53 || len(pl) == 0 {
+			return nil, false
+		}
+		switch {
+		case len(c.m.ips) > 0 && hasIP(c.m.ips, p.dst()):
+			what = "IP " + dstStr(p)
+		case c.m.game == "all" && port >= 1024:
+			what = fmt.Sprintf("игры, порт %d", port)
+		case c.m.game == "apps" && port >= 1024 && c.appOf(c.udpProcOf, p):
+			what = fmt.Sprintf("игры [программа], порт %d", port)
+		default:
+			return nil, false
+		}
+	}
+	if c.seen(flowKey{p.src(), p.dst(), binary.BigEndian.Uint16(p.b[p.ihl:]), port, true}) || c.st.UDPFake == 0 {
+		return nil, false
+	}
+	c.UDPFaked.Add(1)
 	c.log(fmt.Sprintf("UDP %s → ложных пакетов: %d", what, c.st.UDPFake))
 	var outs [][]byte
 	for i := 0; i < c.st.UDPFake; i++ {
@@ -199,3 +238,5 @@ func or2(a, b string) string {
 	}
 	return b
 }
+
+func dstStr(p *ip4) string { d := p.dst(); return ipStr(binary.BigEndian.Uint32(d[:])) }

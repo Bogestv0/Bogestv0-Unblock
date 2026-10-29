@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"net"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -288,5 +289,101 @@ func TestAppsMatch(t *testing.T) {
 	}
 	if _, ok := c.Process(mkTCP(5001, 443, 1, tcpACK|tcpPSH, ch)); !ok {
 		t.Fatal("выбранная программа должна обрабатываться")
+	}
+}
+
+func TestIPListParse(t *testing.T) {
+	rs, bad := parseIPList("1.2.3.4\n10.0.0.0/8 # сеть\n5.5.5.5-5.5.5.9\nмусор\n10.1.0.0/16\n300.1.1.1\n")
+	if len(bad) != 2 || len(rs) != 3 {
+		t.Fatalf("rs=%v bad=%v", rs, bad)
+	}
+	if !hasIP(rs, [4]byte{10, 200, 1, 1}) || !hasIP(rs, [4]byte{5, 5, 5, 7}) || hasIP(rs, [4]byte{5, 5, 5, 10}) || hasIP(rs, [4]byte{1, 2, 3, 5}) {
+		t.Fatal("hasIP")
+	}
+	f := buildFilter(true, "apps", rs)
+	if !strings.Contains(f, "ip.DstAddr >= 10.0.0.0 and ip.DstAddr <= 10.255.255.255") || !strings.Contains(f, "tcp.DstPort >= 1024") {
+		t.Fatal(f)
+	}
+}
+
+func TestGameAndIPSet(t *testing.T) {
+	st := strategies()[0]
+	st.UDPFake = 2
+	mk := func(game string, ips []ipRange) *Core {
+		m := &Matcher{domains: []string{"discord.com"}, game: game, ips: ips, apps: map[string]bool{"g.exe": true}}
+		c := NewCore(st, m, true, nil)
+		c.procOf = func(src [4]byte, sp uint16) string {
+			if sp == 6001 {
+				return "g.exe"
+			}
+			return "x.exe"
+		}
+		c.udpProcOf = c.procOf
+		return c
+	}
+	game := []byte("GAMEPROTO-handshake-data-1234567890")
+	// выключено: порт 27015 не трогаем
+	if _, ok := mk("off", nil).Process(mkTCP(6001, 27015, 1, tcpACK|tcpPSH, game)); ok {
+		t.Fatal("off обработал")
+	}
+	// только программы
+	c := mk("apps", nil)
+	if outs, ok := c.Process(mkTCP(6001, 27015, 1, tcpACK|tcpPSH, game)); !ok || len(outs) < 2 {
+		t.Fatal("apps: программа не обработана")
+	}
+	if _, ok := c.Process(mkTCP(6002, 27015, 1, tcpACK|tcpPSH, game)); ok {
+		t.Fatal("apps: чужая программа обработана")
+	}
+	if outs, ok := c.Process(mkUDP(6001, 30000, game)); !ok || len(outs) != 3 {
+		t.Fatalf("apps udp: %d %v", len(outs), ok)
+	}
+	if _, ok := c.Process(mkUDP(6002, 30000, game)); ok {
+		t.Fatal("apps udp: чужая")
+	}
+	// все
+	c = mk("all", nil)
+	if _, ok := c.Process(mkUDP(6002, 30001, game)); !ok {
+		t.Fatal("all udp")
+	}
+	if _, ok := c.Process(mkUDP(6002, 53, game)); ok {
+		t.Fatal("DNS тронут")
+	}
+	// список IP: mkTCP/mkUDP шлют на 1.2.3.4?
+	pk := mkUDP(6003, 40000, game)
+	p, _ := parseIPv4(pk)
+	d := p.dst()
+	rs, _ := parseIPList(ipStr(uint32(d[0])<<24 | uint32(d[1])<<16 | uint32(d[2])<<8 | uint32(d[3])))
+	c = mk("off", rs)
+	if _, ok := c.Process(pk); !ok {
+		t.Fatal("ipset udp")
+	}
+	rt, _ := parseIPList("162.159.135.0/24")
+	c = mk("off", rt)
+	if _, ok := c.Process(mkTCP(6003, 9999, 1, tcpACK|tcpPSH, game)); !ok {
+		t.Fatal("ipset tcp")
+	}
+	if _, ok := c.Process(mkTCP(6004, 9999, 1, tcpACK|tcpPSH, game)); !ok {
+		t.Fatal("ipset tcp 2")
+	}
+}
+
+func TestFitRanges(t *testing.T) {
+	var rs []ipRange
+	for i := 0; i < 200; i++ { // 200 разрозненных адресов в 100 разных /24
+		v := uint32(10)<<24 | uint32(i/2)<<16 | uint32(i%2)<<8 | 7
+		rs = append(rs, ipRange{v, v})
+	}
+	out := fitRanges(rs, maxFilterRanges)
+	if len(out) > maxFilterRanges || len(out) == 0 {
+		t.Fatalf("диапазонов: %d", len(out))
+	}
+	for _, r := range rs {
+		if !hasIP(out, [4]byte{byte(r.lo >> 24), byte(r.lo >> 16), byte(r.lo >> 8), byte(r.lo)}) {
+			t.Fatal("адрес потерян при укрупнении")
+		}
+	}
+	few := []ipRange{{1, 1}, {100, 200}}
+	if got := fitRanges(few, 40); len(got) != 2 || got[0].lo != 1 {
+		t.Fatalf("малый список изменён: %v", got)
 	}
 }

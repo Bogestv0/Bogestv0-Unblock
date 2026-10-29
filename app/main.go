@@ -18,9 +18,12 @@ import (
 //go:embed ui/index.html
 var indexHTML string
 
-const (
-	port    = "47821"
-	version = "2.2.0"
+const port = "47821"
+
+// подставляются при сборке: -X main.version=… -X main.ghRepo=владелец/репозиторий
+var (
+	version = "2.4.0"
+	ghRepo  = ""
 )
 
 var (
@@ -86,6 +89,7 @@ func serve(background bool) {
 	if err != nil {
 		return // уже запущено
 	}
+	go updater.Loop()
 	if engine.settings.AutoEnable {
 		go engine.Start(engine.settings.Strategy)
 	}
@@ -134,7 +138,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 			up = int64(time.Since(since).Seconds())
 		}
 		jsonOut(w, map[string]any{"running": run, "active": name, "uptime": up, "settings": e.settings,
-			"strategies": names, "version": version, "tune": e.TuneStatus(), "stats": e.Stats()})
+			"strategies": names, "version": version, "tune": e.TuneStatus(), "stats": e.Stats(), "update": updater.Info(), "ipsync": ipSyncInfo(), "ipRemote": remoteIPCount(base)})
 	case "start":
 		var in struct{ Strategy string }
 		json.NewDecoder(r.Body).Decode(&in)
@@ -170,8 +174,12 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		e.mu.Lock()
 		e.settings.AutoEnable = in.AutoEnable
 		in.Apps = cleanApps(in.Apps)
-		changed := strings.Join(in.Apps, ",") != strings.Join(e.settings.Apps, ",") || in.Discord != e.settings.Discord || in.YouTube != e.settings.YouTube || in.AllSites != e.settings.AllSites || in.BlockQUIC != e.settings.BlockQUIC
+		if in.GameMode != "apps" && in.GameMode != "all" {
+			in.GameMode = "off"
+		}
+		changed := in.GameMode != e.settings.GameMode || in.IPSet != e.settings.IPSet || strings.Join(in.Apps, ",") != strings.Join(e.settings.Apps, ",") || in.Discord != e.settings.Discord || in.YouTube != e.settings.YouTube || in.AllSites != e.settings.AllSites || in.BlockQUIC != e.settings.BlockQUIC
 		e.settings.Apps = in.Apps
+		e.settings.GameMode, e.settings.IPSet = in.GameMode, in.IPSet
 		e.settings.Discord, e.settings.YouTube, e.settings.AllSites, e.settings.BlockQUIC = in.Discord, in.YouTube, in.AllSites, in.BlockQUIC
 		if in.AutoStart != e.settings.AutoStart {
 			if err := setAutostart(in.AutoStart); err == nil {
@@ -225,6 +233,22 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		jsonOut(w, map[string]any{"ok": true})
 		go func() { time.Sleep(600 * time.Millisecond); os.Exit(0) }()
+	case "update-check":
+		jsonOut(w, map[string]any{"update": updater.Check(true)})
+	case "update-skip":
+		var in struct{ Version string }
+		json.NewDecoder(r.Body).Decode(&in)
+		e.mu.Lock()
+		e.settings.SkipVersion = in.Version
+		e.saveSettings()
+		e.mu.Unlock()
+		jsonOut(w, map[string]any{"ok": true})
+	case "update-install":
+		if err := updater.Install(e); err != nil {
+			jsonOut(w, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		jsonOut(w, map[string]any{"ok": true})
 	case "procs":
 		jsonOut(w, map[string]any{"procs": runningApps()})
 	case "userlist":
@@ -248,6 +272,34 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		b, _ := os.ReadFile(p)
 		t := strings.TrimSpace(string(b))
 		jsonOut(w, map[string]any{"text": t})
+	case "ipsync":
+		ch, err := SyncIPList(e)
+		if ch {
+			if run, name, _ := e.Running(); run {
+				e.Start(name)
+			}
+		}
+		out := map[string]any{"ok": err == nil, "changed": ch, "count": remoteIPCount(base)}
+		if err != nil {
+			out["error"] = err.Error()
+		}
+		jsonOut(w, out)
+	case "iplist":
+		p := filepath.Join(base, "lists", "list-ips-user.txt")
+		if r.Method == "POST" {
+			var in struct{ Text string }
+			json.NewDecoder(r.Body).Decode(&in)
+			rs, bad := parseIPList(in.Text)
+			os.MkdirAll(filepath.Dir(p), 0o755)
+			os.WriteFile(p, []byte(strings.TrimSpace(in.Text)+"\n"), 0o644)
+			if run, name, _ := e.Running(); run {
+				e.Start(name)
+			}
+			jsonOut(w, map[string]any{"ok": true, "count": len(rs), "bad": bad, "limit": maxFilterRanges})
+			return
+		}
+		b, _ := os.ReadFile(p)
+		jsonOut(w, map[string]any{"text": strings.TrimSpace(string(b))})
 	case "log":
 		jsonOut(w, map[string]any{"text": e.LogText()})
 	case "quit":

@@ -20,16 +20,22 @@ type Runner struct {
 	once sync.Once
 }
 
-func buildFilter(blockQUIC bool) string {
+func buildFilter(blockQUIC bool, game string, ips []ipRange) string {
 	f := "outbound and ip and ((tcp.DstPort == 443 and tcp.PayloadLength > 0) or udp.PayloadLength == 74 or udp.DstPort == 3478"
 	if blockQUIC {
 		f += " or udp.DstPort == 443"
+	}
+	if game == "apps" || game == "all" { // игры: любые порты от 1024
+		f += " or (tcp.DstPort >= 1024 and tcp.PayloadLength > 0) or (udp.DstPort >= 1024 and udp.PayloadLength > 0)"
+	}
+	if rf := rangesFilter(ips); rf != "" {
+		f += " or " + rf
 	}
 	return f + ")"
 }
 
 func StartRunner(dir string, st Strategy, m *Matcher, blockQUIC bool, log func(string)) (*Runner, error) {
-	d, err := openDivert(dir, buildFilter(blockQUIC))
+	d, err := openDivert(dir, buildFilter(blockQUIC, m.game, m.ips))
 	if err != nil {
 		return nil, err
 	}

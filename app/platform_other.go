@@ -25,3 +25,5 @@ func setDNS(on bool) error { return nil }
 
 func openExternal(url string)         { fmt.Println("open:", url) }
 func startUninstaller(p string) error { fmt.Println("uninstall:", p); return nil }
+
+func startSetup(p string) error { fmt.Println("setup:", p); return nil }

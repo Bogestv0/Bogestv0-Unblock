@@ -15,6 +15,8 @@ type Matcher struct {
 	domains []string
 	all     bool
 	apps    map[string]bool // имена exe выбранных программ
+	game    string          // игровой фильтр: off | apps | all
+	ips     []ipRange       // списки IP (если включены)
 }
 
 func readList(s string) []string {
@@ -31,7 +33,10 @@ func readList(s string) []string {
 }
 
 func newMatcher(base string, s Settings) *Matcher {
-	m := &Matcher{all: s.AllSites, apps: map[string]bool{}}
+	m := &Matcher{all: s.AllSites, apps: map[string]bool{}, game: s.GameMode}
+	if m.game != "apps" && m.game != "all" {
+		m.game = "off"
+	}
 	for _, a := range s.Apps {
 		if a = strings.ToLower(strings.TrimSpace(a)); a != "" {
 			m.apps[a] = true
@@ -50,6 +55,16 @@ func newMatcher(base string, s Settings) *Matcher {
 	}
 	if b, err := os.ReadFile(filepath.Join(base, "lists", "list-user.txt")); err == nil {
 		m.domains = append(m.domains, readList(string(b))...)
+	}
+	if s.IPSet {
+		if b, err := os.ReadFile(filepath.Join(base, "lists", "list-ips-user.txt")); err == nil {
+			m.ips, _ = parseIPList(string(b))
+		}
+		if b, err := os.ReadFile(filepath.Join(base, "lists", "ipset-remote.txt")); err == nil {
+			rs, _ := parseIPList(string(b))
+			m.ips = append(m.ips, rs...)
+		}
+		m.ips = fitRanges(m.ips, maxFilterRanges)
 	}
 	return m
 }

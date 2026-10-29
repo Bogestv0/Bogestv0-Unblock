@@ -96,13 +96,28 @@ func releaseDriver() {
 	}
 }
 
-// setDNS: on=true — для активных адаптеров DNS 1.1.1.1 и 8.8.8.8; false — вернуть автоматические (от роутера/провайдера).
+// setDNS: on=true — DNS Cloudflare и Google на активных адаптерах (прежние настройки сохраняются в dns-backup.json);
+// on=false — вернуть прежние (или автоматические, если сохранённых нет).
 func setDNS(on bool) error {
-	script := "Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses }"
+	bk := strings.ReplaceAll(filepath.Join(base, "dns-backup.json"), "'", "''")
+	var script string
 	if on {
-		script = "Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ('1.1.1.1','8.8.8.8') }"
+		script = `$ErrorActionPreference='Stop'; $f='` + bk + `'
+$ad=@(Get-NetAdapter | Where-Object Status -eq 'Up')
+if(-not (Test-Path $f)){ $b=@(); foreach($a in $ad){ $c=Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex; $b+=[pscustomobject]@{i=[int]$a.ifIndex;a=@($c.ServerAddresses)} }; ConvertTo-Json -InputObject @($b) -Compress | Set-Content -Encoding UTF8 $f }
+foreach($a in $ad){ try { Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses ('1.1.1.1','8.8.8.8','2606:4700:4700::1111','2001:4860:4860::8888') } catch { Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses ('1.1.1.1','8.8.8.8') } }`
+	} else {
+		script = `$ErrorActionPreference='Stop'; $f='` + bk + `'
+$ours=@('1.1.1.1','8.8.8.8','2606:4700:4700::1111','2001:4860:4860::8888'); $b=@()
+if(Test-Path $f){ $b=@(Get-Content -Raw $f | ConvertFrom-Json) }
+foreach($a in @(Get-NetAdapter | Where-Object Status -eq 'Up')){
+  $old=$b | Where-Object { $_.i -eq $a.ifIndex } | Select-Object -First 1
+  $addr=@(); if($old){ $addr=@($old.a | Where-Object { $ours -notcontains $_ }) }
+  if($addr.Count -gt 0){ Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses $addr } else { Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ResetServerAddresses }
+}
+Remove-Item -Force $f -ErrorAction SilentlyContinue`
 	}
-	c := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	c := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 	hide(c)
 	if out, err := c.CombinedOutput(); err != nil {
 		return fmt.Errorf("не удалось изменить DNS: %v %s", err, strings.TrimSpace(string(out)))
@@ -118,6 +133,13 @@ func openExternal(url string) { exec.Command("rundll32", "url.dll,FileProtocolHa
 // startUninstaller запускает удаление отдельным скрытым процессом (он сам закроет программу и всё уберёт).
 func startUninstaller(path string) error {
 	c := exec.Command(path, "--uninstall", "--silent")
+	hide(c)
+	return c.Start()
+}
+
+// startSetup запускает скачанный установщик в тихом режиме (он остановит эту программу и запустит новую).
+func startSetup(path string) error {
+	c := exec.Command(path, "--silent")
 	hide(c)
 	return c.Start()
 }

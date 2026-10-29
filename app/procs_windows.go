@@ -16,6 +16,7 @@ import (
 var (
 	iphlp                = syscall.NewLazyDLL("iphlpapi.dll")
 	pGetExtendedTcpTable = iphlp.NewProc("GetExtendedTcpTable")
+	pGetExtendedUdpTable = iphlp.NewProc("GetExtendedUdpTable")
 	kern                 = syscall.NewLazyDLL("kernel32.dll")
 	pOpenProcess         = kern.NewProc("OpenProcess")
 	pQueryImageName      = kern.NewProc("QueryFullProcessImageNameW")
@@ -119,3 +120,30 @@ func runningApps() []string {
 var skipProc = map[string]bool{"svchost.exe": true, "system": true, "csrss.exe": true, "wininit.exe": true, "services.exe": true,
 	"lsass.exe": true, "smss.exe": true, "winlogon.exe": true, "dwm.exe": true, "fontdrvhost.exe": true, "conhost.exe": true,
 	"runtimebroker.exe": true, "taskhostw.exe": true, "sihost.exe": true, "ctfmon.exe": true, "searchhost.exe": true}
+
+// udpOwner: владелец UDP-сокета по локальному порту (таблица UDP, TABLE_OWNER_PID = 1).
+func udpOwner(src [4]byte, sport uint16) string {
+	var size uint32
+	for try := 0; try < 3; try++ {
+		buf := make([]byte, size+4096)
+		size = uint32(len(buf))
+		r, _, _ := pGetExtendedUdpTable.Call(uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)), 0, 2, 1, 0)
+		if r == 122 {
+			continue
+		}
+		if r != 0 || len(buf) < 4 {
+			return ""
+		}
+		n := int(binary.LittleEndian.Uint32(buf))
+		for i := 0; i < n && 4+(i+1)*12 <= len(buf); i++ {
+			row := buf[4+i*12:]
+			la := [4]byte{row[0], row[1], row[2], row[3]}
+			lp := uint16(row[4])<<8 | uint16(row[5])
+			if lp == sport && (la == src || la == [4]byte{}) {
+				return pidName(binary.LittleEndian.Uint32(row[8:]))
+			}
+		}
+		return ""
+	}
+	return ""
+}

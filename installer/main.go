@@ -22,10 +22,11 @@ import (
 //go:embed all:assets
 var assets embed.FS
 
+var version = "2.4.0"
+
 const (
-	appExe  = "Bogestv0-Unblock.exe"
-	version = "2.2.0"
-	regKey  = `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Bogestv0Unblock`
+	appExe = "Bogestv0-Unblock.exe"
+	regKey = `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Bogestv0Unblock`
 )
 
 func silent() bool {
@@ -81,11 +82,13 @@ func main() {
 	install(dest)
 }
 
-func stopOld(dest string) {
+func stopOld(dest string, removeTask bool) {
 	run("taskkill", "/F", "/IM", appExe)
-	_ = 0
-	run("schtasks", "/Delete", "/TN", "Bogestv0Unblock", "/F")
-	time.Sleep(700 * time.Millisecond)
+	run("sc", "stop", "WinDivert")
+	if removeTask {
+		run("schtasks", "/Delete", "/TN", "Bogestv0Unblock", "/F")
+	}
+	time.Sleep(900 * time.Millisecond)
 }
 
 func install(dest string) {
@@ -94,7 +97,7 @@ func install(dest string) {
 	say("==============================================\n")
 
 	say("[1/4] Копирую файлы...")
-	stopOld(dest)
+	stopOld(dest, false)
 	keep := map[string][]byte{}
 	for _, f := range []string{"settings.json", "lists/list-general-user.txt", "lists/list-exclude-user.txt", "lists/ipset-exclude-user.txt"} {
 		if b, err := os.ReadFile(filepath.Join(dest, filepath.FromSlash(f))); err == nil {
@@ -150,9 +153,13 @@ func install(dest string) {
 	say("  На рабочем столе появился ярлык «Bogestv0 Unblock».")
 	say("  Сейчас откроется окно программы:")
 	say("   1) Нажмите «Подобрать автоматически» — программа сама найдёт рабочую стратегию")
-	say("   2) Включите «Запускать вместе с Windows», чтобы обход работал всегда")
+	say("   2) Включите «Всегда включён», чтобы обход работал сам после запуска Windows")
 	say("  Windows спросит разрешение администратора — это нужно для драйвера WinDivert.")
 	if runtime.GOOS == "windows" {
+		if run("schtasks", "/Query", "/TN", "Bogestv0Unblock") == nil { // «Всегда включён» уже настроен — запускаем без запроса прав
+			run("schtasks", "/Run", "/TN", "Bogestv0Unblock")
+			time.Sleep(3 * time.Second)
+		}
 		exec.Command("explorer.exe", exe).Start() // запуск без повышения прав
 	}
 	pause()
@@ -171,8 +178,7 @@ func regAdd(name, value string) {
 
 func uninstall(dest string) {
 	say("Удаляю Bogestv0 Unblock...")
-	stopOld(dest)
-	run("sc", "stop", "WinDivert")
+	stopOld(dest, true)
 	run("sc", "delete", "WinDivert")
 	run("powershell", "-NoProfile", "-Command", `Remove-Item -Force ([IO.Path]::Combine([Environment]::GetFolderPath('Desktop'),'Bogestv0 Unblock.lnk')), ([IO.Path]::Combine([Environment]::GetFolderPath('Programs'),'Bogestv0 Unblock.lnk')) -ErrorAction SilentlyContinue`)
 	run("reg", "delete", regKey, "/f")

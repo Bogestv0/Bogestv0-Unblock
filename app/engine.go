@@ -16,15 +16,18 @@ import (
 )
 
 type Settings struct {
-	Strategy   string   `json:"strategy"`
-	AutoEnable bool     `json:"autoEnable"` // включать обход при запуске программы
-	AutoStart  bool     `json:"autoStart"`  // запускать при входе в Windows
-	Discord    bool     `json:"discord"`
-	YouTube    bool     `json:"youtube"`
-	AllSites   bool     `json:"allSites"`  // применять ко всем HTTPS-сайтам
-	BlockQUIC  bool     `json:"blockQuic"` // отбрасывать QUIC (UDP 443): сайты перейдут на TCP
-	DNSSet     bool     `json:"dnsSet"`    // мы меняли DNS (вернуть при удалении)
-	Apps       []string `json:"apps"`      // программы (имена exe), для которых обход применяется ко всем сайтам
+	Strategy    string   `json:"strategy"`
+	AutoEnable  bool     `json:"autoEnable"` // включать обход при запуске программы
+	AutoStart   bool     `json:"autoStart"`  // запускать при входе в Windows
+	Discord     bool     `json:"discord"`
+	YouTube     bool     `json:"youtube"`
+	AllSites    bool     `json:"allSites"`    // применять ко всем HTTPS-сайтам
+	BlockQUIC   bool     `json:"blockQuic"`   // отбрасывать QUIC (UDP 443): сайты перейдут на TCP
+	GameMode    string   `json:"gameMode"`    // off | apps | all — перехват не только 443-го порта
+	IPSet       bool     `json:"ipSet"`       // применять обход к адресам из списка IP
+	SkipVersion string   `json:"skipVersion"` // версию, от которой отказались («Позже»)
+	DNSSet      bool     `json:"dnsSet"`      // мы меняли DNS (вернуть при удалении)
+	Apps        []string `json:"apps"`        // программы (имена exe), для которых обход применяется ко всем сайтам
 }
 
 type Engine struct {
