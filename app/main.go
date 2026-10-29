@@ -1,4 +1,5 @@
-// Bogestv0 Unblock — управление обходом блокировок (собственный движок) с окном в браузере.
+// Bogestv0 Unblock © 2026 Bogestv0 (https://t.me/bogestv0). Собственная разработка.
+// Управление обходом блокировок (собственный движок) с окном в браузере.
 package main
 
 import (
@@ -23,7 +24,7 @@ const port = "47821"
 
 // подставляются при сборке: -X main.version=… -X main.ghRepo=владелец/репозиторий
 var (
-	version = "2.4.1"
+	version = "2.5.0"
 	ghRepo  = ""
 )
 

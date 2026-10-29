@@ -1,4 +1,5 @@
-Bogestv0 Unblock — собственная разработка (движок обхода, окно, установщик).
+Bogestv0 Unblock — собственная разработка автора Bogestv0 (движок обхода, окно, установщик).
+© 2026 Bogestv0 — https://t.me/bogestv0
 
 Сторонний компонент: WinDivert (https://github.com/basil00/WinDivert, Basil, LGPLv3 / GPLv2).
 Это драйвер перехвата пакетов для Windows. Он не входит в состав программы: установщик скачивает

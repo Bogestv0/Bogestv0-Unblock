@@ -1,4 +1,4 @@
-// Установщик Bogestv0 Unblock для Windows (один .exe).
+// Установщик Bogestv0 Unblock для Windows (один .exe). © 2026 Bogestv0 (https://t.me/bogestv0).
 package main
 
 import (
