@@ -24,7 +24,7 @@ const port = "47821"
 
 // подставляются при сборке: -X main.version=… -X main.ghRepo=владелец/репозиторий
 var (
-	version = "2.5.0"
+	version = "2.5.1"
 	ghRepo  = ""
 )
 

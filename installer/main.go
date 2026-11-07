@@ -22,7 +22,7 @@ import (
 //go:embed all:assets
 var assets embed.FS
 
-var version = "2.4.1"
+var version = "2.5.1"
 
 const (
 	appExe = "Bogestv0-Unblock.exe"
